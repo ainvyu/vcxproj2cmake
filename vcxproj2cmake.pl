@@ -19,15 +19,63 @@ my $filepath    = $ARGV[0]
 my $target_conf = $ARGV[1]
     || die "Usage: $FindBin::Script <vcxproj path> <target configuration>";
 
+my $filters_path = $filepath . '.filters';
+
 my $vcxproj_xml  = XML::TreePP->new()->parsefile($filepath);
+my $vcxproj_filters_xml  = XML::TreePP->new()->parsefile($filters_path);
 my $target = $vcxproj_xml->{Project}->{PropertyGroup}->[0]->{RootNamespace};
 my $target_prop = get_target_property($target_conf,
                                       get_propertys($vcxproj_xml));
 my $filenode_ref = get_file_node($vcxproj_xml);
 my $item_def_ref = get_item_def_group($vcxproj_xml,
                                       $target_prop->{-Condition});
+my %filters = get_filters($vcxproj_filters_xml);
 
-make($filenode_ref, $item_def_ref);
+make($filenode_ref, $item_def_ref, %filters);
+
+sub get_filters {
+    my ($vcxproj_filters_xml) = @_;
+    my %filters = ();
+  
+    my @itemgroups = @{$vcxproj_filters_xml->{Project}->{ItemGroup}};
+    
+    # first itemgroup is list of filters
+    for my $filter (@{$itemgroups[0]->{Filter}}) {
+        my $filtername = $filter->{-Include};
+        my @files = ();
+        @{$filters{$filtername}} = @files;
+    }
+    
+    # second itemgroup contains sorce files filter information
+    for my $clcompile (@{$itemgroups[1]->{ClCompile}}) {
+        my $filename = $clcompile->{-Include};
+        my $filter = $clcompile->{Filter};
+        push @{$filters{$filter}}, $filename;
+    }
+    
+    # third itemgroup contains header files filter information
+    for my $clinclude (@{$itemgroups[2]->{ClInclude}}) {
+        my $filename = $clinclude->{-Include};
+        my $filter = $clinclude->{Filter};
+        push @{$filters{$filter}}, $filename;
+    }
+    
+    # fourth itemgroup contains filter information for files that should not compiled (like readme)
+    
+    # fifth itemgroup contains recources filter
+    
+    # remove empty arrays
+    my @toDelete;
+    for my $filter (keys %filters) {
+        my @filterfiles = @{$filters{$filter}};
+        if (scalar @filterfiles == 0) {
+            push @toDelete, $filter;
+        }
+    }
+    #delete @filters{@toDelete};
+    
+    return %filters;
+}
 
 sub get_target_property {
     my ($target_conf, @property_groups) = @_;
@@ -103,7 +151,7 @@ sub get_file_node {
 }
 
 sub make {
-    my ($filenode_ref, $item_def_ref) = @_;
+    my ($filenode_ref, $item_def_ref, %filters) = @_;
 
     my @srcs    = @{$filenode_ref->{ClCompile}};
     my @headers = @{$filenode_ref->{ClInclude}};
@@ -128,23 +176,44 @@ sub make {
 
     warn Dumper(@includes);
 
-    my %vars = (
-        type     => $target_prop->{ConfigurationType},
-        charset  => $target_prop->{CharacterSet},
-        target   => $target,
-        def      => +(join "\n\t", @defs),
-        lib      => +(join "\n\t", @deps),
-        include  => +(join "\n\t", @includes),
-        src      => +(join "\n\t", @srcs),
-        header   => +(join "\n\t", @headers),
-    );
-
-    warn Dumper(%vars);
-
     my $tx = Text::Xslate->new(
         syntax    => 'TTerse',
         path      => [ '.', '.' ],
     );
+
+    # render source groups
+    my $render_source_groups = '';
+    for my $filter (keys %filters) {        
+        my @files = @{$filters{$filter}};
+        $filter =~ s/\\/\\\\/g;
+        my %vars = (
+            flter => $filter,
+            files => +(join "\n\t", @files),
+        );
+        warn Dumper(%vars);
+        
+        try {
+            my $render = $tx->render( 'CMakeSourceGroup.tx', \%vars );
+            $render_source_groups = $render_source_groups . $render;
+        } catch {
+            print "caught error: $_\n";
+        };        
+    }
+
+
+    my %vars = (
+        type            => $target_prop->{ConfigurationType},
+        charset         => $target_prop->{CharacterSet},
+        target          => $target,
+        def             => +(join "\n\t", @defs),
+        lib             => +(join "\n\t", @deps),
+        include         => +(join "\n\t", @includes),
+        src             => +(join "\n\t", @srcs),
+        header          => +(join "\n\t", @headers),
+        source_groups   => Text::Xslate::Util::mark_raw($render_source_groups),
+    );
+
+    warn Dumper(%vars);
 
     my $render_text;
     try {

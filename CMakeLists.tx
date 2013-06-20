@@ -43,6 +43,8 @@ SET(${this_target}_HEADER_FILES
     [% $header %]
     )
 
+[% source_groups %]
+
 ## section: precompiled header	
 #ADD_MSVC_PRECOMPILED_HEADER("precompiled.h" "precompiled.cpp" MySources)
 #ADD_LIBRARY(MyLibrary ${MySources})
