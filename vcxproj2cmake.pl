@@ -21,6 +21,7 @@ my $target_conf = $ARGV[1]
 
 my $filters_path = $filepath . '.filters';
 
+
 my $vcxproj_xml  = XML::TreePP->new()->parsefile($filepath);
 my $vcxproj_filters_xml  = XML::TreePP->new()->parsefile($filters_path);
 my $target = $vcxproj_xml->{Project}->{PropertyGroup}->[0]->{RootNamespace};
@@ -150,6 +151,219 @@ sub get_file_node {
     return $filenode_ref;
 }
 
+sub render_find_packages {
+    my ($tx, @srcs) = @_;
+    my %find_packages_supported_by_cmake = (
+        # include_pattern => package_name
+        
+        #'' => 'ALSA',
+        #'' => 'Armadillo',
+        #'' => 'ASPELL',
+        #'' => 'AVIFile',
+        #'' => 'BISON',
+        #'' => 'BLAS',
+        'boost/' => 'Boost',
+        #'' => 'Bullet',
+        #'' => 'BZip2',
+        #'' => 'CABLE',
+        #'' => 'Coin3D',
+        #'' => 'CUDA',
+        #'' => 'Cups',
+        #'' => 'CURL',
+        #'' => 'Curses',
+        #'' => 'CVS',
+        #'' => 'CxxTest',
+        #'' => 'Cygwin',
+        #'' => 'Dart',
+        #'' => 'DCMTK',
+        #'' => 'DevIL',
+        #'' => 'Doxygen',
+        #'' => 'EXPAT',
+        #'' => 'FLEX',
+        #'' => 'FLTK',
+        #'' => 'FLTK2',
+        #'' => 'Freetype',
+        #'' => 'GCCXML',
+        #'' => 'GDAL',
+        #'' => 'Gettext',
+        #'' => 'GIF',
+        #'' => 'Git',
+        #'' => 'GLU',
+        #'' => 'GLUT',
+        #'' => 'Gnuplot',
+        #'' => 'GnuTLS',
+        #'' => 'GTest',
+        #'' => 'GTK',
+        #'' => 'GTK2',
+        #'' => 'HDF5',
+        #'' => 'HSPELL',
+        #'' => 'HTMLHelp',
+        #'' => 'ImageMagick',
+        #'' => 'ITK',
+        #'' => 'Jasper',
+        #'' => 'Java',
+        #'' => 'JNI',
+        #'' => 'JPEG',
+        #'' => 'KDE3',
+        #'' => 'KDE4',
+        #'' => 'LAPACK',
+        #'' => 'LATEX',
+        #'' => 'LibArchive',
+        #'' => 'LibLZMA',
+        #'' => 'LibXml2',
+        #'' => 'LibXslt',
+        #'' => 'Lua50',
+        #'' => 'Lua51',
+        #'' => 'Matlab',
+        #'' => 'MFC',
+        #'' => 'Motif',
+        #'' => 'MPEG',
+        #'' => 'MPEG2',
+        #'' => 'MPI',
+        #'' => 'OpenAL',
+        #'' => 'OpenGL',
+        #'' => 'OpenMP',
+        #'' => 'OpenSceneGraph',
+        'openssl/' => 'OpenSSL',
+        #'' => 'OpenThreads',
+        #'' => 'osg',
+        #'' => 'osgAnimation',
+        #'' => 'osgDB',
+        #'' => 'osgFX',
+        #'' => 'osgGA',
+        #'' => 'osgIntrospection',
+        #'' => 'osgManipulator',
+        #'' => 'osgParticle',
+        #'' => 'osgPresentation',
+        #'' => 'osgProducer',
+        #'' => 'osgQt',
+        #'' => 'osgShadow',
+        #'' => 'osgSim',
+        #'' => 'osgTerrain',
+        #'' => 'osgText',
+        #'' => 'osgUtil',
+        #'' => 'osgViewer',
+        #'' => 'osgVolume',
+        #'' => 'osgWidget',
+        #'' => 'osg_functions',
+        #'' => 'PackageHandleStandardArgs',
+        #'' => 'PackageMessage',
+        #'' => 'Perl',
+        #'' => 'PerlLibs',
+        #'' => 'PHP4',
+        #'' => 'PhysFS',
+        #'' => 'Pike',
+        #'' => 'PkgConfig',
+        #'' => 'PNG',
+        #'' => 'PostgreSQL',
+        #'' => 'Producer',
+        #'' => 'Protobuf',
+        #'' => 'PythonInterp',
+        #'' => 'PythonLibs',
+        #'' => 'Qt',
+        #'' => 'Qt3',
+        #'' => 'Qt4',
+        #'' => 'QuickTime',
+        #'' => 'RTI',
+        #'' => 'Ruby',
+        'SDL/' => 'SDL',
+        #'' => 'SDL_image',
+        #'' => 'SDL_mixer',
+        #'' => 'SDL_net',
+        #'' => 'SDL_sound',
+        #'' => 'SDL_ttf',
+        #'' => 'SelfPackers',
+        #'' => 'Squish',
+        #'' => 'Subversion',
+        #'' => 'SWIG',
+        #'' => 'TCL',
+        #'' => 'Tclsh',
+        #'' => 'TclStub',
+        #'' => 'Threads',
+        #'' => 'TIFF',
+        #'' => 'UnixCommands',
+        #'' => 'VTK',
+        #'' => 'Wget',
+        #'' => 'Wish',
+        #'' => 'wxWidgets',
+        #'' => 'wxWindows',
+        #'' => 'X11',
+        #'' => 'XMLRPC',
+        'zlib.h' => 'ZLIB',        
+    );
+    my $rendered_find_packages = '';
+    
+    # find all libs that used 
+    my @libs_to_find_patterns = keys(%find_packages_supported_by_cmake);
+    my @libs;
+    for my $file (@srcs) {        
+        # find libs that the file uses
+        open my $info, $file or die "Could not open $file: $!";
+        while( my $line = <$info>)  {  
+            if ($line =~ /#\s*include/) {
+                my @lib_pattern_indexes_to_delete;
+                
+                for my $lib_match (@libs_to_find_patterns) {
+                    if ($line =~ m/^\s*#\s*include\s*<$lib_match/) {
+                        my $lib = $find_packages_supported_by_cmake{$lib_match};
+                        push @libs, $lib;
+                        
+                        my $lib_index = 0;
+                        $lib_index++ until $libs_to_find_patterns[$lib_index] eq $lib_match;
+                        push @lib_pattern_indexes_to_delete, $lib_index;
+                    }
+                }
+                
+                for my $index (@lib_pattern_indexes_to_delete) {
+                    splice(@libs_to_find_patterns, $index, 1);    
+                }
+            } 
+        }
+        close $info;
+    }
+
+    for my $lib (@libs) {
+        my %vars = (
+            package => $lib,
+            package_upcase => uc $lib,
+            );
+        warn Dumper(%vars);
+        
+        try {
+            my $render = $tx->render( 'CMakeFindPackage.tx', \%vars );
+            $rendered_find_packages = $rendered_find_packages . $render;
+        } catch {
+            print "caught error: $_\n";
+        };
+    }
+
+    return Text::Xslate::Util::mark_raw($rendered_find_packages);
+}
+
+sub render_source_groups {
+    my ($tx, %filters) = @_;
+    
+    my $rendered_source_groups = '';
+    for my $filter (keys %filters) {        
+        my @files = @{$filters{$filter}};
+        $filter =~ s/\\/\\\\/g;
+        my %vars = (
+            flter => $filter,
+            files => +(join "\n\t", @files),
+        );
+        warn Dumper(%vars);
+        
+        try {
+            my $render = $tx->render( 'CMakeSourceGroup.tx', \%vars );
+            $rendered_source_groups = $rendered_source_groups . $render;
+        } catch {
+            print "caught error: $_\n";
+        };        
+    }
+    
+    return Text::Xslate::Util::mark_raw($rendered_source_groups);
+}
+
 sub make {
     my ($filenode_ref, $item_def_ref, %filters) = @_;
 
@@ -181,25 +395,8 @@ sub make {
         path      => [ '.', '.' ],
     );
 
-    # render source groups
-    my $render_source_groups = '';
-    for my $filter (keys %filters) {        
-        my @files = @{$filters{$filter}};
-        $filter =~ s/\\/\\\\/g;
-        my %vars = (
-            flter => $filter,
-            files => +(join "\n\t", @files),
-        );
-        warn Dumper(%vars);
-        
-        try {
-            my $render = $tx->render( 'CMakeSourceGroup.tx', \%vars );
-            $render_source_groups = $render_source_groups . $render;
-        } catch {
-            print "caught error: $_\n";
-        };        
-    }
-
+    my $rendered_find_packages = render_find_packages($tx, @headers, @srcs);
+    my $rendered_source_groups = render_source_groups($tx, %filters);
 
     my %vars = (
         type            => $target_prop->{ConfigurationType},
@@ -210,7 +407,8 @@ sub make {
         include         => +(join "\n\t", @includes),
         src             => +(join "\n\t", @srcs),
         header          => +(join "\n\t", @headers),
-        source_groups   => Text::Xslate::Util::mark_raw($render_source_groups),
+        source_groups   => $rendered_source_groups,
+        find_packages   => $rendered_find_packages,
     );
 
     warn Dumper(%vars);
