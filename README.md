@@ -1,4 +1,4 @@
-## Require module:
+## Required modules:
 * Try::Tiny;
 * XML::TreePP;
 * XML::TreePP::XMLPath;
