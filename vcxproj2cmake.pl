@@ -41,7 +41,7 @@ sub get_filters {
     my @itemgroups = @{$vcxproj_filters_xml->{Project}->{ItemGroup}};
     
     # first itemgroup is list of filters
-    for my $filter (@{$itemgroups[0]->{Filter}}) {
+    for my $filter ($itemgroups[0]->{Filter}) {
         my $filtername = $filter->{-Include};
         my @files = ();
         @{$filters{$filtername}} = @files;
