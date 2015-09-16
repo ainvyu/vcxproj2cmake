@@ -14,6 +14,8 @@ use Text::Xslate;
 use Data::Dumper;
 use FindBin;
 
+use File::Basename ();
+
 my $filepath    = $ARGV[0]
     || die "Usage: $FindBin::Script <vcxproj path> <target configuration>";
 my $target_conf = $ARGV[1]
@@ -410,7 +412,7 @@ sub make {
 
     my $tx = Text::Xslate->new(
         syntax    => 'TTerse',
-        path      => [ '.', '.' ],
+        path      => [ File::Basename::dirname($0) ],
     );
 
     my $rendered_find_packages = render_find_packages($tx, @headers, @srcs);
