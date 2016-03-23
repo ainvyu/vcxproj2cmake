@@ -288,6 +288,7 @@ sub render_find_packages {
         #'' => 'wxWidgets',
         #'' => 'wxWindows',
         #'' => 'X11',
+		'xercesc' => 'XercesC',
         #'' => 'XMLRPC',
         'zlib.h' => 'ZLIB',        
     );
