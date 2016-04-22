@@ -55,10 +55,17 @@ sub get_filters {
     }
     
     # third itemgroup contains header files filter information
-    for my $clinclude (@{$itemgroups[2]->{ClInclude}}) {
+    if (ref($itemgroups[2]->{ClInclude}) eq "HASH") {
+        my $clinclude = $itemgroups[2]->{ClInclude};
         my $filename = $clinclude->{-Include};
         my $filter = $clinclude->{Filter};
         push @{$filters{$filter}}, $filename;
+    } else {
+        for my $clinclude (@{$itemgroups[2]->{ClInclude}}) {
+            my $filename = $clinclude->{-Include};
+            my $filter = $clinclude->{Filter};
+            push @{$filters{$filter}}, $filename;
+        }
     }
     
     # fourth itemgroup contains filter information for files that should not compiled (like readme)
@@ -368,26 +375,37 @@ sub render_source_groups {
 sub make {
     my ($filenode_ref, $item_def_ref, %filters) = @_;
 
-    my @srcs    = @{$filenode_ref->{ClCompile}};
-    my @headers = @{$filenode_ref->{ClInclude}};
-    my $add_dir = $item_def_ref->{ClCompile}->{AdditionalIncludeDirectories};
-    $add_dir =~ s{\\}{/}g;
-    my @includes =
-        grep { $_ ne '%(AdditionalIncludeDirectories)' }
-            split ';', $add_dir;
+    my @srcs     = @{$filenode_ref->{ClCompile}};
+    my @headers  = @{$filenode_ref->{ClInclude}};
+    my @deps     = ();
+    my @defs     = ();
+    my @includes = ();
+
+    
+    my $add_dir  = $item_def_ref->{ClCompile}->{AdditionalIncludeDirectories};
+    if (defined($add_dir)) {
+        $add_dir =~ s{\\}{/}g;
+        my @includes =
+            grep { $_ ne '%(AdditionalIncludeDirectories)' }
+                split ';', $add_dir;
+    }
 
     my $def = $item_def_ref->{ClCompile}->{PreprocessorDefinitions};
     # add prefix -D. example> -DSHP
-    my @defs =
-        map { "-D$_"; }
-            grep { $_ ne '%(PreprocessorDefinitions)' }
-                split ';', $def;
+    if (defined($def)) {
+        @defs =
+            map { "-D$_"; }
+                grep { $_ ne '%(PreprocessorDefinitions)' }
+                    split ';', $def;
+    }
 
     my $add_dep = $item_def_ref->{Link}->{AdditionalDependencies};
-    $add_dep =~ s{\\}{/}g;
-    my @deps =
-        grep { $_ ne '%(AdditionalDependencies)' }
-            split ';', $add_dep;
+    if (defined($add_dep)) {
+        $add_dep =~ s{\\}{/}g;
+        my @deps =
+            grep { $_ ne '%(AdditionalDependencies)' }
+                split ';', $add_dep;
+    }
 
     warn Dumper(@includes);
 
